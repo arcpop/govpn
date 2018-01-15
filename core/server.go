@@ -5,6 +5,8 @@ import (
 	"log"
 	"net"
 	"sync"
+
+	"github.com/arcpop/govpn/cert"
 )
 
 const (
@@ -55,19 +57,19 @@ type Server struct {
 	serverReceiveQueue chan []byte
 
 	caCertificate     *x509.Certificate
-	serverCertificate *CertificateAndKey
+	serverCertificate *cert.CertificateAndKey
 }
 
 func NewServer(serverAddr, caCertFile, serverCertFile, serverKeyFile string, ServerQueueSize int, ServerMACAddr *MacAddr) (*Server, error) {
-	caCert, err := parseCertificate(caCertFile)
+	caCert, err := cert.ParseCertificate(caCertFile)
 	if err != nil {
 		return nil, err
 	}
-	serverCert, err := parseCertificate(serverCertFile)
+	serverCert, err := cert.ParseCertificate(serverCertFile)
 	if err != nil {
 		return nil, err
 	}
-	serverKey, err := parseKey(serverKeyFile)
+	serverKey, err := cert.ParseKey(serverKeyFile)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +85,7 @@ func NewServer(serverAddr, caCertFile, serverCertFile, serverKeyFile string, Ser
 		ServerMACAddress:   *ServerMACAddr,
 		serverConn:         c,
 		caCertificate:      caCert,
-		serverCertificate:  &CertificateAndKey{Certificate: serverCert, PrivateKey: serverKey},
+		serverCertificate:  &cert.CertificateAndKey{Certificate: serverCert, PrivateKey: serverKey},
 		clients:            make(map[clientMapKey]*Endpoint),
 		virtualSwitch:      make(map[MacAddr]*Endpoint),
 		packetQueue:        make(chan *QueuedPacket, ServerQueueSize),

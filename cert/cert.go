@@ -1,4 +1,4 @@
-package core
+package cert
 
 import (
 	"crypto"
@@ -14,7 +14,7 @@ type CertificateAndKey struct {
 	PrivateKey  crypto.Signer
 }
 
-func parseCertificate(certFile string) (*x509.Certificate, error) {
+func ParseCertificate(certFile string) (*x509.Certificate, error) {
 	certPEM, err := ioutil.ReadFile(certFile)
 	if err != nil {
 		return nil, err
@@ -41,7 +41,7 @@ func parseCertificate(certFile string) (*x509.Certificate, error) {
 	return cert, nil
 }
 
-func parseKey(keyFile string) (crypto.Signer, error) {
+func ParseKey(keyFile string) (crypto.Signer, error) {
 	keyPEM, err := ioutil.ReadFile(keyFile)
 	if err != nil {
 		return nil, err

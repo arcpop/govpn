@@ -6,6 +6,8 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/arcpop/govpn/cert"
 )
 
 type Client struct {
@@ -15,7 +17,7 @@ type Client struct {
 
 	serverUDPAddr     *net.UDPAddr
 	conn              *net.UDPConn
-	clientCertificate *CertificateAndKey
+	clientCertificate *cert.CertificateAndKey
 	serverCertificate *x509.Certificate
 	cryptoContext     *SymmetricCryptoContext
 	dhPublicKey       []byte
