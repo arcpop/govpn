@@ -40,10 +40,16 @@ func main() {
 	flag.StringVar(&Name, "name", "Test", "The SubjectName field of the certificate")
 	flag.StringVar(&CACertFile, "cacert", "ca.pem", "The path to the CA certificate file")
 	flag.StringVar(&CAKeyFile, "cakey", "ca.key", "The path to the CA key file")
-	flag.StringVar(&CertFile, "cert", "cert.pem", "The path to the certificate file")
-	flag.StringVar(&KeyFile, "key", "cert.key", "The path to the key file")
+	flag.StringVar(&CertFile, "cert", "", "The path to the certificate file")
+	flag.StringVar(&KeyFile, "key", "", "The path to the key file")
 	flag.Parse()
 
+	if CertFile == "" {
+		CertFile = Name + ".pem"
+	}
+	if KeyFile == "" {
+		KeyFile = Name + ".key"
+	}
 	var c elliptic.Curve
 	switch CurveName {
 	case "P256":

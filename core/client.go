@@ -14,37 +14,47 @@ type Client struct {
 	sync.Mutex
 
 	ServerAddress string
+	SendQueue     chan<- []byte
+	ReceiveQueue  <-chan []byte
 
-	serverUDPAddr     *net.UDPAddr
-	conn              *net.UDPConn
-	clientCertificate *cert.CertificateAndKey
-	serverCertificate *x509.Certificate
-	cryptoContext     *SymmetricCryptoContext
-	dhPublicKey       []byte
-	dhPrivateKey      []byte
-	handshakeDone     bool
+	clientToServerQueue chan []byte
+	clientReceiveQueue  chan []byte
+	serverUDPAddr       *net.UDPAddr
+	conn                *net.UDPConn
+	clientCertificate   *cert.CertificateAndKey
+	serverCertificate   *x509.Certificate
+	cryptoContext       *SymmetricCryptoContext
+	dhPublicKey         []byte
+	dhPrivateKey        []byte
+	handshakeDone       bool
 }
 
-func NewClient(ClientCertFile, ClientKeyFile, ServerCertFile string) (*Client, error) {
-	serverCert, err := parseCertificate(ServerCertFile)
+func NewClient(ServerAddr, ClientCertFile, ClientKeyFile, ServerCertFile string) (*Client, error) {
+	serverCert, err := cert.ParseCertificate(ServerCertFile)
 	if err != nil {
 		return nil, err
 	}
-	clientCert, err := parseCertificate(ClientCertFile)
+	clientCert, err := cert.ParseCertificate(ClientCertFile)
 	if err != nil {
 		return nil, err
 	}
-	clientKey, err := parseKey(ClientKeyFile)
+	clientKey, err := cert.ParseKey(ClientKeyFile)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Client{
-		handshakeDone:     false,
-		cryptoContext:     &SymmetricCryptoContext{NonceCounter: 0},
-		clientCertificate: &CertificateAndKey{Certificate: clientCert, PrivateKey: clientKey},
-		serverCertificate: serverCert,
-	}, nil
+	c := &Client{
+		handshakeDone:       false,
+		ServerAddress:       ServerAddr,
+		cryptoContext:       &SymmetricCryptoContext{NonceCounter: 0},
+		clientCertificate:   &cert.CertificateAndKey{Certificate: clientCert, PrivateKey: clientKey},
+		serverCertificate:   serverCert,
+		clientReceiveQueue:  make(chan []byte, 1024),
+		clientToServerQueue: make(chan []byte, 1024),
+	}
+	c.SendQueue = c.clientToServerQueue
+	c.ReceiveQueue = c.clientReceiveQueue
+	return c, nil
 }
 func (c *Client) PerformHandshake(cipherType AEADType, curveType CurveType) error {
 	c.Lock()
@@ -105,18 +115,37 @@ func (c *Client) PerformHandshake(cipherType AEADType, curveType CurveType) erro
 		log.Println("core: client: failed to verify server certificate")
 		return ErrInvalidCertificate
 	}
+
+	c.cryptoContext.SharedSecret, err = CalculateSecret(c.dhPrivateKey, sh.ServerSessionKey, curveType)
+	if err != nil {
+		c.conn.Close()
+		return err
+	}
+	copy(c.cryptoContext.SessionNonce[:], sh.SessionNonce[:])
 	c.handshakeDone = true
 	log.Println("core: client: connected to server")
 	return nil
 }
 
-func (c *Client) Run(packetConsumer chan<- []byte) {
+func (c *Client) sendWorker() {
+	for pkt := range c.clientToServerQueue {
+		p, err := encryptVPNPacket(pkt, c.cryptoContext, true)
+		if err != nil {
+			log.Println("core: client: failed to encrypt a packet: ", err)
+			continue
+		}
+		c.conn.Write(p)
+	}
+}
+func (c *Client) Run() {
 	c.Lock()
 	if !c.handshakeDone {
 		c.Unlock()
 		return
 	}
+	c.conn.SetWriteDeadline(time.Time{})
 	c.conn.SetReadDeadline(time.Time{})
+	go c.sendWorker()
 	c.Unlock()
 	for {
 		pkt := make([]byte, 2048)
@@ -127,13 +156,13 @@ func (c *Client) Run(packetConsumer chan<- []byte) {
 		}
 		p, err := decryptVPNPacket(pkt[:n], c.cryptoContext, false)
 		if err != nil {
-			log.Println("core: client: failed to decrypt a packet")
+			log.Println("core: client: failed to decrypt a packet: ", err)
 			return
 		}
-		packetConsumer <- p
+		c.clientReceiveQueue <- p
 	}
 }
 
-func (c *Client) RunBackground(packetConsumer chan<- []byte) {
-	go c.Run(packetConsumer)
+func (c *Client) RunBackground() {
+	go c.Run()
 }

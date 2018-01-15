@@ -154,7 +154,8 @@ func (s *Server) newClient(addr *net.UDPAddr, pkt []byte) {
 			SharedSecret:    secret,
 			SessionNonce:    sh.SessionNonce,
 		},
-		Name: ch.ClientCertificate.Subject.CommonName,
+		Name:       ch.ClientCertificate.Subject.CommonName,
+		udpAddress: addr,
 	}
 	s.insertClient(addr, c)
 	s.packetQueue <- &QueuedPacket{Addr: addr, Data: response}
@@ -172,14 +173,24 @@ func (s *Server) handlePacket(c *Endpoint, pkt []byte) {
 		return
 	}
 
-	var destAddr MacAddr
+	var destAddr, sourceAddr MacAddr
 	copy(destAddr[:], p[0:6])
+	copy(sourceAddr[:], p[6:12])
+
+	if sourceAddr != MACBroadcastAddr && c.macAddress == nil {
+		c.macAddress = &sourceAddr
+		s.virtualSwitchLock.Lock()
+		s.virtualSwitch[sourceAddr] = c
+		s.virtualSwitchLock.Unlock()
+	}
 
 	if destAddr == s.ServerMACAddress {
 		s.serverReceiveQueue <- p
 		return
 	}
-
+	if destAddr == MACBroadcastAddr {
+		s.serverReceiveQueue <- p
+	}
 	s.sendPacketToClients(p)
 }
 
@@ -246,8 +257,9 @@ func (s *Server) getClientByMac(addr *MacAddr) (*Endpoint, bool) {
 }
 
 func (s *Server) sendPacketToClients(p []byte) {
-	var destAddr MacAddr
+	var destAddr, sourceAddr MacAddr
 	copy(destAddr[:], p[0:6])
+	copy(sourceAddr[:], p[6:12])
 
 	if destAddr != MACBroadcastAddr {
 		c, ok := s.getClientByMac(&destAddr)
@@ -268,6 +280,9 @@ func (s *Server) sendPacketToClients(p []byte) {
 	queue := make([]*QueuedPacket, len(s.clients))
 	i := 0
 	for _, c := range s.clients {
+		if c.macAddress != nil && *c.macAddress == sourceAddr {
+			continue
+		}
 		encP, err := encryptVPNPacket(p, c.cipherContext, false)
 		if err != nil {
 			log.Println("core: server: failed to encrypt a packet; " + err.Error())
@@ -278,7 +293,10 @@ func (s *Server) sendPacketToClients(p []byte) {
 	}
 	s.clientsLock.RUnlock()
 
-	for _, k := range queue {
+	for j, k := range queue {
+		if j == i {
+			return
+		}
 		s.packetQueue <- k
 	}
 }

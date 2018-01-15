@@ -7,9 +7,14 @@ import (
 	"github.com/arcpop/govpn/core"
 )
 
+var (
+	p1 = []byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xAA, 0xBB, 0xAA, 0xBB, 0xAA, 0xBB, 0x00, 0x30}
+	p2 = []byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xAA, 0xBB, 0xFF, 0xE1, 0xAA, 0xBB, 0x00, 0x30}
+)
+
 func main() {
 	s, err := core.NewServer(
-		"localhost:26666",
+		":6666",
 		"ca.pem",
 		"server.pem",
 		"server.key",
@@ -23,6 +28,7 @@ func main() {
 	go s.Run()
 
 	c1, err := core.NewClient(
+		"localhost:6666",
 		"client.pem",
 		"client.key",
 		"server.pem",
@@ -38,13 +44,15 @@ func main() {
 		return
 	}
 
-	recvQueue := make(chan []byte)
-	c1.RunBackground(recvQueue)
+	c1.RunBackground()
 
 	go func(q <-chan []byte) {
 		for p := range q {
 			fmt.Printf("c1 received: %+v\n", p)
 		}
-	}(recvQueue)
-
+	}(c1.ReceiveQueue)
+	s.SendQueue <- p1
+	c1.SendQueue <- p2
+	p := <-s.ReceiveQueue
+	fmt.Printf("server received: %+v\n", p)
 }

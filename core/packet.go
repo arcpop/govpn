@@ -73,6 +73,11 @@ type SymmetricCryptoContext struct {
 func createAEADInstance(ctx *SymmetricCryptoContext) (cipher.AEAD, error) {
 	switch ctx.SymmetricCipher {
 	case Aes128Gcm:
+		a, err := aes.NewCipher(ctx.SharedSecret)
+		if err != nil {
+			return nil, err
+		}
+		return cipher.NewGCM(a)
 	case Aes256Gcm:
 		a, err := aes.NewCipher(ctx.SharedSecret)
 		if err != nil {
@@ -110,8 +115,8 @@ func encryptVPNPacket(p []byte, ctx *SymmetricCryptoContext, clientToServer bool
 	buf := make([]byte, VPNPacketLength, VPNPacketLength+len(p)+c.Overhead())
 	buf[0] = byte(VpnPacketType)
 	copy(buf[1:7], nonce[0:6])
-	binary.LittleEndian.PutUint16(buf[7:9], uint16(len(p)))
 	buf = c.Seal(buf, nonce[:], p[:], GoVPNAEADData)
+	binary.LittleEndian.PutUint16(buf[7:9], uint16(len(buf)-VPNPacketLength))
 	return buf, nil
 }
 
@@ -189,24 +194,24 @@ func (c *Client) deserializeAndVerifyServerHello(p []byte, h *ServerHelloData) (
 func (c *Client) signAndSerializeClientHello(h *ClientHelloData, sessionKey DHPubKey) ([]byte, error) {
 	h.ClientSessionKeyLength = len(sessionKey)
 	h.ClientCertificateLength = len(c.clientCertificate.Certificate.Raw)
-	buf := make([]byte, ClientHelloDataLength+h.ClientSessionKeyLength+h.ClientCertificateLength)
+	dataLength := ClientHelloDataLength + h.ClientSessionKeyLength + h.ClientCertificateLength
+	buf := make([]byte, dataLength)
 	buf[0] = byte(ClientHelloPacketType)
 	buf[1] = byte(h.CurveSelection)
 	buf[2] = byte(h.AEADSelection)
 	binary.LittleEndian.PutUint16(buf[3:5], uint16(h.ClientSessionKeyLength))
 	binary.LittleEndian.PutUint16(buf[5:7], uint16(h.ClientCertificateLength))
+	copy(buf[ClientHelloDataLength:ClientHelloDataLength+h.ClientSessionKeyLength], sessionKey)
+	copy(buf[ClientHelloDataLength+h.ClientSessionKeyLength:dataLength], c.clientCertificate.Certificate.Raw)
 
 	hasher := sha256.New()
-	hasher.Write(buf[0:7])
-	hasher.Write(sessionKey)
-	hasher.Write(c.clientCertificate.Certificate.Raw)
+	hasher.Write(buf)
+	digest := hasher.Sum(nil)
 
-	signature, err := c.clientCertificate.PrivateKey.Sign(rand.Reader, hasher.Sum(nil), crypto.SHA256)
+	signature, err := c.clientCertificate.PrivateKey.Sign(rand.Reader, digest, crypto.SHA256)
 	if err != nil {
 		return nil, err
 	}
-	copy(buf[7:h.ClientSessionKeyLength], sessionKey)
-	copy(buf[7:h.ClientCertificateLength], c.clientCertificate.Certificate.Raw)
 	return append(buf, signature...), nil
 }
 
@@ -226,7 +231,6 @@ func (s *Server) deserializeAndVerifyClientHello(p []byte, h *ClientHelloData) (
 	if len(p) < dataLength {
 		return false, ErrInvalidClientHello
 	}
-
 	certs, err := x509.ParseCertificates(p[ClientHelloDataLength+h.ClientSessionKeyLength : dataLength])
 	if err != nil {
 		return false, err
@@ -237,6 +241,7 @@ func (s *Server) deserializeAndVerifyClientHello(p []byte, h *ClientHelloData) (
 	}
 
 	if certs[0].PublicKeyAlgorithm != x509.ECDSA {
+		log.Println("core: PublicKeyAlgorithm != ECDSA")
 		return false, ErrInvalidCertificate
 	}
 
@@ -246,10 +251,10 @@ func (s *Server) deserializeAndVerifyClientHello(p []byte, h *ClientHelloData) (
 		log.Println("core: certificate not signed by CA")
 		return false, nil
 	}
-
 	err = CheckSignature(certs[0], p[0:dataLength], p[dataLength:])
 	if err != nil {
 		if err == ErrInvalidSignature {
+			log.Println("core: invalid signature")
 			return false, nil
 		}
 		return false, err
