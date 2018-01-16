@@ -19,14 +19,18 @@ type Client struct {
 
 	clientToServerQueue chan []byte
 	clientReceiveQueue  chan []byte
-	serverUDPAddr       *net.UDPAddr
-	conn                *net.UDPConn
-	clientCertificate   *cert.CertificateAndKey
-	serverCertificate   *x509.Certificate
-	cryptoContext       *SymmetricCryptoContext
-	dhPublicKey         []byte
-	dhPrivateKey        []byte
-	handshakeDone       bool
+
+	stopReadWorker  chan interface{}
+	stopWriteWorker chan interface{}
+
+	serverUDPAddr     *net.UDPAddr
+	conn              *net.UDPConn
+	clientCertificate *cert.CertificateAndKey
+	serverCertificate *x509.Certificate
+	cryptoContext     *SymmetricCryptoContext
+	dhPublicKey       []byte
+	dhPrivateKey      []byte
+	handshakeDone     bool
 }
 
 func NewClient(ServerAddr, ClientCertFile, ClientKeyFile, ServerCertFile string) (*Client, error) {
@@ -51,11 +55,14 @@ func NewClient(ServerAddr, ClientCertFile, ClientKeyFile, ServerCertFile string)
 		serverCertificate:   serverCert,
 		clientReceiveQueue:  make(chan []byte, 1024),
 		clientToServerQueue: make(chan []byte, 1024),
+		stopReadWorker:      make(chan interface{}, 1),
+		stopWriteWorker:     make(chan interface{}, 1),
 	}
 	c.SendQueue = c.clientToServerQueue
 	c.ReceiveQueue = c.clientReceiveQueue
 	return c, nil
 }
+
 func (c *Client) PerformHandshake(cipherType AEADType, curveType CurveType) error {
 	c.Lock()
 	defer c.Unlock()
@@ -125,6 +132,12 @@ func (c *Client) PerformHandshake(cipherType AEADType, curveType CurveType) erro
 	c.handshakeDone = true
 	log.Println("core: client: connected to server")
 	return nil
+}
+
+func (c *Client) Close() error {
+	c.stopReadWorker <- 1
+	c.stopWriteWorker <- 1
+	return c.conn.Close()
 }
 
 func (c *Client) sendWorker() {
