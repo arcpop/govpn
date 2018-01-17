@@ -1,7 +1,13 @@
 package adapter
 
 import (
+	"errors"
+
 	"github.com/arcpop/govpn/core"
+)
+
+var (
+	ErrInvalidMTU = errors.New("adapter: invalid mtu")
 )
 
 type Instance interface {
@@ -14,5 +20,8 @@ type Instance interface {
 }
 
 func NewTAP(name string, mtu int) (Instance, error) {
+	if mtu <= 0 {
+		return nil, ErrInvalidMTU
+	}
 	return newTAP(name, mtu)
 }

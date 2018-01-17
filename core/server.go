@@ -98,6 +98,10 @@ func NewServer(serverAddr, caCertFile, serverCertFile, serverKeyFile string, Ser
 	return s, nil
 }
 
+func (s *Server) Close() error {
+	return s.serverConn.Close()
+}
+
 func (s *Server) sendWorker() {
 	for p := range s.packetQueue {
 		_, err := s.serverConn.WriteToUDP(p.Data, p.Addr)

@@ -180,7 +180,7 @@ func (c *Client) deserializeAndVerifyServerHello(p []byte, h *ServerHelloData) (
 		return false, ErrInvalidServerHello
 	}
 
-	err := CheckSignature(c.serverCertificate, p[0:dataLength], p[dataLength:])
+	err := checkSignature(c.serverCertificate, p[0:dataLength], p[dataLength:])
 	if err != nil {
 		if err == ErrInvalidSignature {
 			return false, nil
@@ -251,7 +251,7 @@ func (s *Server) deserializeAndVerifyClientHello(p []byte, h *ClientHelloData) (
 		log.Println("core: certificate not signed by CA")
 		return false, nil
 	}
-	err = CheckSignature(certs[0], p[0:dataLength], p[dataLength:])
+	err = checkSignature(certs[0], p[0:dataLength], p[dataLength:])
 	if err != nil {
 		if err == ErrInvalidSignature {
 			log.Println("core: invalid signature")
@@ -268,7 +268,7 @@ type ecdsaSignature struct {
 	R, S *big.Int
 }
 
-func CheckSignature(cert *x509.Certificate, data, signature []byte) error {
+func checkSignature(cert *x509.Certificate, data, signature []byte) error {
 	h := sha256.New()
 	h.Write(data)
 	digest := h.Sum(nil)

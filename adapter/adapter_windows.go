@@ -1,18 +1,17 @@
+//build +windows
 package adapter
 
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"log"
 	"net"
-	"strconv"
 
 	"github.com/arcpop/govpn/core"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
-
-//build +windows
 
 const (
 	fileDeviceUnknown = uint32(0x00000022)
@@ -55,18 +54,18 @@ func newTAP(name string, mtu int) (Instance, error) {
 		receiveChannel: make(chan []byte, 1024),
 		sendChannel:    make(chan []byte, 1024),
 	}
+	/*
+		instance.originalMTU, err = getMTU(key)
+		if err != nil {
+			return nil, err
+		}
 
-	instance.originalMTU, err = getMTU(key)
-	if err != nil {
-		return nil, err
-	}
-
-	instance.mtu = mtu
-	err = setMTU(key, strconv.Itoa(mtu))
-	if err != nil {
-		return nil, err
-	}
-
+		instance.mtu = mtu
+		err = setMTU(key, strconv.Itoa(mtu))
+		if err != nil {
+			return nil, err
+		}
+	*/
 	path, err := windows.UTF16PtrFromString(`\\.\Global\` + deviceID + `.tap`)
 	if err != nil {
 		instance.Close()
@@ -183,21 +182,25 @@ func ctlCode(deviceType, function, method, access uint32) uint32 {
 }
 
 func setMediaStatus(h windows.Handle, connected bool) error {
-	mediaStatus := []byte{0, 0, 0, 0}
+	var mediaStatus [4]byte
 	var retVal uint32
 	if connected {
 		mediaStatus[0] = 1
 	}
-	return windows.DeviceIoControl(
+	err := windows.DeviceIoControl(
 		h,
 		ioctlSetMediaStatus,
 		&mediaStatus[0],
 		4,
-		nil,
-		0,
+		&mediaStatus[0],
+		4,
 		&retVal,
 		nil,
 	)
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("adapter: DeviceIoControl ioctl SetMediaStatus failed with error \"%s\"", err.Error())
 }
 func getMacAddr(h windows.Handle) (*core.MacAddr, error) {
 	var macAddr core.MacAddr
@@ -205,14 +208,17 @@ func getMacAddr(h windows.Handle) (*core.MacAddr, error) {
 	err := windows.DeviceIoControl(
 		h,
 		ioctlGetMacAddress,
-		nil,
-		0,
+		&macAddr[0],
+		6,
 		&macAddr[0],
 		6,
 		&retVal,
 		nil,
 	)
-	return &macAddr, err
+	if err == nil {
+		return &macAddr, nil
+	}
+	return nil, fmt.Errorf("adapter: DeviceIoControl ioctl GetMacAddress failed with error \"%s\"", err.Error())
 }
 
 func getDeviceID(key registry.Key) (string, error) {

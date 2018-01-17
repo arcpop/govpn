@@ -2,6 +2,7 @@ package core
 
 import (
 	"crypto/x509"
+	"fmt"
 	"log"
 	"net"
 	"sync"
@@ -36,15 +37,15 @@ type Client struct {
 func NewClient(ServerAddr, ClientCertFile, ClientKeyFile, ServerCertFile string) (*Client, error) {
 	serverCert, err := cert.ParseCertificate(ServerCertFile)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Failed to parse server certificate (%s)\n", err.Error())
 	}
 	clientCert, err := cert.ParseCertificate(ClientCertFile)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Failed to parse client certificate (%s)\n", err.Error())
 	}
 	clientKey, err := cert.ParseKey(ClientKeyFile)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Failed to parse client private key (%s)\n", err.Error())
 	}
 
 	c := &Client{

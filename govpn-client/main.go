@@ -19,9 +19,9 @@ var (
 
 func init() {
 	flag.StringVar(&ServerAddress, "server", "localhost:666", "Address and port of server")
-	flag.StringVar(&ClientCertFile, "clientcert", "cert.pem", "File with client certificate")
+	flag.StringVar(&ClientCertFile, "clientcert", "client.pem", "File with client certificate")
 	flag.StringVar(&ClientKeyFile, "clientkey", "client.key", "File with client private key")
-	flag.StringVar(&ClientCertFile, "servercert", "server.pem", "File with server certificate")
+	flag.StringVar(&ServerCertFile, "servercert", "server.pem", "File with server certificate")
 	flag.StringVar(&CurveType, "curve", "P25519", "Curve for ECDH. Valid choices: P25519, P256, P384, P521")
 	flag.StringVar(&AEADType, "cipher", "AES256-GCM", "Cipher for encryption. Choices: AES128-GCM, AES256-GCM, ChaCha20Poly1305")
 	flag.Parse()
