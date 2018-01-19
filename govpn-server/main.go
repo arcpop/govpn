@@ -28,14 +28,14 @@ func init() {
 func main() {
 	inst, err := adapter.NewTAP("tap0", 1450)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("NewTap returned error:", err)
 		return
 	}
 	defer inst.Close()
 
 	server, err := core.NewServer(ServerAddress, CACertFile, ServerCertFile, ServerKeyFile, QueueSize, inst.GetMACAddress())
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("NewServer returned error:", err)
 		return
 	}
 	defer server.Close()
