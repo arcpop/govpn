@@ -49,7 +49,6 @@ func main() {
 func tapToServerWorker(server *core.Server, inst adapter.Instance) {
 	channel := inst.ReceiveChannel()
 	for pkt, ok := <-channel; ok; pkt, ok = <-channel {
-		log.Println("Received packet from TAP")
 		server.SendQueue <- pkt
 	}
 }
@@ -58,6 +57,5 @@ func serverToTapWorker(server *core.Server, inst adapter.Instance) {
 	channel := inst.TransmitChannel()
 	for pkt, ok := <-server.ReceiveQueue; ok; pkt, ok = <-server.ReceiveQueue {
 		channel <- pkt
-		log.Println("Sent packet to TAP")
 	}
 }
