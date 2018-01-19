@@ -36,7 +36,7 @@ func newTAP(name string, mtu int) (Instance, error) {
 	if name != "" && len(b) < 16 {
 		copy(ifr_req[0:15], b[:])
 	}
-	binary.LittleEndian.PutUint16(ifr_req[16:])
+	binary.LittleEndian.PutUint16(ifr_req[16:], flags)
 	err = unix.IoctlSetWinsize(fd, unix.TUNSETIFF, unsafe.Pointer(&ifr_req[0]))
 	if err != nil {
 		unix.Close(fd)
