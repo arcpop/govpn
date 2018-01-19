@@ -31,13 +31,13 @@ func newTAP(name string, mtu int) (Instance, error) {
 		return nil, err
 	}
 	var flags uint16 = IFF_TAP | IFF_NO_PI
-	ifr_req := make([]byte, 32)
+	var ifr_req [32]byte
 	b := syscall.StringByteSlice(name)
 	if name != "" && len(b) < 16 {
 		copy(ifr_req[0:15], b[:])
 	}
 	binary.LittleEndian.PutUint16(ifr_req[16:], flags)
-	err = unix.IoctlSetWinsize(fd, unix.TUNSETIFF, *unix.Winsize(unsafe.Pointer(&ifr_req[0]))
+	err = unix.IoctlSetWinsize(fd, unix.TUNSETIFF, *unix.Winsize(unsafe.Pointer(&ifr_req[0])))
 	if err != nil {
 		unix.Close(fd)
 		return nil, err
@@ -67,7 +67,8 @@ func newTAP(name string, mtu int) (Instance, error) {
 }
 
 func parseName(s []byte) string {
-	for i := 0; i < len(s); i++ {
+	i := 0
+	for ; i < len(s); i++ {
 		if s[i] == 0 {
 			break
 		}
