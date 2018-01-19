@@ -44,12 +44,12 @@ func newTAP(name string, mtu int) (Instance, error) {
 		return nil, fmt.Errorf("adapter: failed to set device to TAP mode: " + err.Error())
 	}
 
-	binary.LittleEndian.PutUint32(ifr_req[16:], uint32(mtu))
+	/*binary.LittleEndian.PutUint32(ifr_req[16:], uint32(mtu))
 	err = unix.IoctlSetWinsize(fd, unix.SIOCSIFMTU, (*unix.Winsize)(unsafe.Pointer(&ifr_req[0])))
 	if err != nil {
 		unix.Close(fd)
 		return nil, fmt.Errorf("adapter: failed to set mtu: " + err.Error())
-	}
+	}*/
 
 	i := &tapInterface{
 		name:         parseName(ifr_req[0:16]),
