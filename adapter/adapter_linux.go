@@ -3,6 +3,7 @@ package adapter
 
 import (
 	"encoding/binary"
+	"fmt"
 	"net"
 	"syscall"
 	"unsafe"
@@ -28,7 +29,7 @@ type tapInterface struct {
 func newTAP(name string, mtu int) (Instance, error) {
 	fd, err := unix.Open("/dev/net/tun", unix.O_RDWR, 0)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("adapter: failed to open /dev/net/tun: " + err.Error())
 	}
 	var flags uint16 = IFF_TAP | IFF_NO_PI
 	var ifr_req [32]byte
@@ -40,14 +41,14 @@ func newTAP(name string, mtu int) (Instance, error) {
 	err = unix.IoctlSetWinsize(fd, unix.TUNSETIFF, (*unix.Winsize)(unsafe.Pointer(&ifr_req[0])))
 	if err != nil {
 		unix.Close(fd)
-		return nil, err
+		return nil, fmt.Errorf("adapter: failed to set device to TAP mode: " + err.Error())
 	}
 
 	binary.LittleEndian.PutUint32(ifr_req[16:], uint32(mtu))
 	err = unix.IoctlSetWinsize(fd, unix.SIOCSIFMTU, (*unix.Winsize)(unsafe.Pointer(&ifr_req[0])))
 	if err != nil {
 		unix.Close(fd)
-		return nil, err
+		return nil, fmt.Errorf("adapter: failed to set mtu: " + err.Error())
 	}
 
 	i := &tapInterface{
@@ -59,7 +60,7 @@ func newTAP(name string, mtu int) (Instance, error) {
 	iface, err := net.InterfaceByName(i.name)
 	if err != nil {
 		unix.Close(fd)
-		return nil, err
+		return nil, fmt.Errorf("adapter: failed find interface: " + err.Error())
 	}
 	copy(i.macAddr[:], iface.HardwareAddr[:])
 	i.mtu = iface.MTU
