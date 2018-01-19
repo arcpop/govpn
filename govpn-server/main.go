@@ -42,6 +42,7 @@ func main() {
 
 	go tapToServerWorker(server, inst)
 	go serverToTapWorker(server, inst)
+	log.Println("server is running")
 	server.Run()
 }
 
