@@ -121,7 +121,7 @@ func (a *tapAdapter) readWorker() {
 }
 func (a *tapAdapter) writeWorker() {
 	for pkt, ok := <-a.sendChannel; ok; pkt, ok = <-a.sendChannel {
-		_, err := windows.Read(a.driverHandle, pkt)
+		_, err := windows.Write(a.driverHandle, pkt)
 		if err != nil {
 			log.Println("adapter: write returned error: " + err.Error())
 		}
