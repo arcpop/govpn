@@ -44,8 +44,7 @@ type Server struct {
 	clientsLock      sync.RWMutex
 	clients          map[clientMapKey]*Endpoint
 
-	virtualSwitchLock sync.RWMutex
-	virtualSwitch     map[MacAddr]*Endpoint
+	virtualSwitch *vSwitch
 
 	serverConn *net.UDPConn
 
@@ -87,7 +86,7 @@ func NewServer(serverAddr, caCertFile, serverCertFile, serverKeyFile string, Ser
 		caCertificate:      caCert,
 		serverCertificate:  &cert.CertificateAndKey{Certificate: serverCert, PrivateKey: serverKey},
 		clients:            make(map[clientMapKey]*Endpoint),
-		virtualSwitch:      make(map[MacAddr]*Endpoint),
+		virtualSwitch:      &vSwitch{associatedClients: make(map[MacAddr]*Endpoint)},
 		packetQueue:        make(chan *QueuedPacket, ServerQueueSize),
 		serverReceiveQueue: make(chan []byte, ServerQueueSize),
 		serverSendQueue:    make(chan []byte, ServerQueueSize),
@@ -113,8 +112,8 @@ func (s *Server) sendWorker() {
 }
 
 func (s *Server) sendQueueHandler() {
-	for pkt := range s.serverSendQueue {
-		s.sendPacketToClients(pkt)
+	for p := range s.serverSendQueue {
+		s.virtualSwitch.SwitchPacket(s, p)
 	}
 }
 
@@ -176,26 +175,7 @@ func (s *Server) handlePacket(c *Endpoint, pkt []byte) {
 		log.Println("core: server: dropping a too small packet")
 		return
 	}
-
-	var destAddr, sourceAddr MacAddr
-	copy(destAddr[:], p[0:6])
-	copy(sourceAddr[:], p[6:12])
-
-	if sourceAddr != MACBroadcastAddr && c.macAddress == nil {
-		c.macAddress = &sourceAddr
-		s.virtualSwitchLock.Lock()
-		s.virtualSwitch[sourceAddr] = c
-		s.virtualSwitchLock.Unlock()
-	}
-
-	if destAddr == s.ServerMACAddress {
-		s.serverReceiveQueue <- p
-		return
-	}
-	if destAddr == MACBroadcastAddr {
-		s.serverReceiveQueue <- p
-	}
-	s.sendPacketToClients(p)
+	s.virtualSwitch.SwitchPacketFromClient(s, p, c)
 }
 
 func (s *Server) Run() {
@@ -235,53 +215,15 @@ func (s *Server) getClient(addr *net.UDPAddr) (*Endpoint, bool) {
 	return c, ok
 }
 
-func (s *Server) getClientByMac(addr *MacAddr) (*Endpoint, bool) {
-	s.virtualSwitchLock.RLock()
-	c, ok := s.virtualSwitch[*addr]
-	s.virtualSwitchLock.RUnlock()
-	if ok {
-		return c, ok
-	}
-	s.clientsLock.RLock()
-	for _, k := range s.clients {
-		if *k.macAddress == *addr {
-			c = k
-			ok = true
-			break
-		}
-	}
-	s.clientsLock.RUnlock()
-	if ok {
-		s.virtualSwitchLock.Lock()
-		s.virtualSwitch[*addr] = c
-		s.virtualSwitchLock.Unlock()
-	}
-	return c, ok
-}
-
-func (s *Server) sendPacketToClients(p []byte) {
+func (s *Server) sendPacketToAllClients(p []byte) {
 	var destAddr, sourceAddr MacAddr
 	copy(destAddr[:], p[0:6])
 	copy(sourceAddr[:], p[6:12])
 
-	if destAddr != MACBroadcastAddr {
-		c, ok := s.getClientByMac(&destAddr)
-		if ok {
-			encP, err := encryptVPNPacket(p, c.cipherContext, false)
-			if err != nil {
-				log.Println("core: server: failed to encrypt a packet; " + err.Error())
-				return
-			}
-			s.packetQueue <- &QueuedPacket{Addr: c.udpAddress, Data: encP}
-			return
-		}
-	}
-
 	s.clientsLock.RLock()
 	//We make a copy so we don't block the lock while waiting for the server
 	//to send all those packets
-	queue := make([]*QueuedPacket, len(s.clients))
-	i := 0
+	queue := make([]*QueuedPacket, 0, len(s.clients))
 	for _, c := range s.clients {
 		if c.macAddress != nil && *c.macAddress == sourceAddr {
 			continue
@@ -291,15 +233,11 @@ func (s *Server) sendPacketToClients(p []byte) {
 			log.Println("core: server: failed to encrypt a packet; " + err.Error())
 			continue
 		}
-		queue[i] = &QueuedPacket{Addr: c.udpAddress, Data: encP}
-		i++
+		queue = append(queue, &QueuedPacket{Addr: c.udpAddress, Data: encP})
 	}
 	s.clientsLock.RUnlock()
 
-	for j, k := range queue {
-		if j == i {
-			return
-		}
+	for _, k := range queue {
 		s.packetQueue <- k
 	}
 }
