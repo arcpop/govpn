@@ -65,6 +65,8 @@ func newTAP(name string, mtu int) (Instance, error) {
 	}
 	copy(i.macAddr[:], iface.HardwareAddr[:])
 	i.mtu = iface.MTU
+	go i.toTapWorker()
+	go i.fromTapWorker()
 	return i, nil
 }
 
