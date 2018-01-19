@@ -4,6 +4,7 @@ package adapter
 import (
 	"encoding/binary"
 	"fmt"
+	"log"
 	"net"
 	"syscall"
 	"unsafe"
@@ -65,6 +66,27 @@ func newTAP(name string, mtu int) (Instance, error) {
 	copy(i.macAddr[:], iface.HardwareAddr[:])
 	i.mtu = iface.MTU
 	return i, nil
+}
+
+func (t *tapInterface) toTapWorker() {
+	for p, ok := <-t.writeChannel; ok; p, ok = <-t.writeChannel {
+		_, err := unix.Write(t.fd, p)
+		if err != nil {
+			log.Println("tap: error when writing to tap: " + err.Error())
+		}
+	}
+}
+func (t *tapInterface) fromTapWorker() {
+	for {
+		p := make([]byte, 1800)
+		n, err := unix.Read(t.fd, p)
+		if err != nil {
+			log.Println("tap: error when reading from tap: " + err.Error())
+			continue
+		}
+		p = p[:n]
+		t.readChannel <- p
+	}
 }
 
 func parseName(s []byte) string {
