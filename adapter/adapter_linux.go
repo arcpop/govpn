@@ -37,14 +37,14 @@ func newTAP(name string, mtu int) (Instance, error) {
 		copy(ifr_req[0:15], b[:])
 	}
 	binary.LittleEndian.PutUint16(ifr_req[16:], flags)
-	err = unix.IoctlSetWinsize(fd, unix.TUNSETIFF, *unix.Winsize(unsafe.Pointer(&ifr_req[0])))
+	err = unix.IoctlSetWinsize(fd, unix.TUNSETIFF, (unsafe.Pointer(&ifr_req[0])))
 	if err != nil {
 		unix.Close(fd)
 		return nil, err
 	}
 
 	binary.LittleEndian.PutUint32(ifr_req[16:], uint32(mtu))
-	err = unix.IoctlSetWinsize(fd, unix.SIOCSIFMTU, *unix.Winsize(unsafe.Pointer(&ifr_req[0])))
+	err = unix.IoctlSetWinsize(fd, unix.SIOCSIFMTU, (*unix.Winsize)(unsafe.Pointer(&ifr_req[0])))
 	if err != nil {
 		unix.Close(fd)
 		return nil, err
