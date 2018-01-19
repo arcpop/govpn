@@ -209,7 +209,6 @@ func (s *Server) Run() {
 			return
 		}
 		pkt = pkt[:n]
-		log.Println("core: server: received a packet")
 		c, ok := s.getClient(addr)
 		if !ok {
 			go s.newClient(addr, pkt)
