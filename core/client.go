@@ -54,8 +54,8 @@ func NewClient(ServerAddr, ClientCertFile, ClientKeyFile, ServerCertFile string)
 		cryptoContext:       &SymmetricCryptoContext{NonceCounter: 0},
 		clientCertificate:   &cert.CertificateAndKey{Certificate: clientCert, PrivateKey: clientKey},
 		serverCertificate:   serverCert,
-		clientReceiveQueue:  make(chan []byte, 1024),
-		clientToServerQueue: make(chan []byte, 1024),
+		clientReceiveQueue:  make(chan []byte, 1),
+		clientToServerQueue: make(chan []byte, 1),
 		stopReadWorker:      make(chan interface{}, 1),
 		stopWriteWorker:     make(chan interface{}, 1),
 	}
