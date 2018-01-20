@@ -4,7 +4,7 @@ package transport
 type TransportChannelClientID interface{}
 
 type TransportChannel interface {
-	RegisterOnClientDisconnect(<-chan *TransportChannelClientID)
-	SendPacket(pkt []byte, client *TransportChannelClientID)
-	ReceivePacket() ([]byte, *TransportChannelClientID)
+	Close() error
+	SendPacket(pkt []byte, client TransportChannelClientID)
+	ReceivePacket() ([]byte, TransportChannelClientID)
 }
