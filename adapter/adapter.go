@@ -19,9 +19,9 @@ type Instance interface {
 	GetMACAddress() *core.MacAddr
 }
 
-func NewTAP(name string, mtu int) (Instance, error) {
+func NewTAP(name string, mtu, queueSize int) (Instance, error) {
 	if mtu <= 0 {
 		return nil, ErrInvalidMTU
 	}
-	return newTAP(name, mtu)
+	return newTAP(name, mtu, queueSize)
 }

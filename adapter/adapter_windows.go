@@ -39,7 +39,7 @@ type tapAdapter struct {
 	regKey      registry.Key
 }
 
-func newTAP(name string, mtu int) (Instance, error) {
+func newTAP(name string, mtu, queueSize int) (Instance, error) {
 	key, err := getTAPAdapterRegistryKey(componentID)
 	if err != nil {
 		return nil, err
@@ -51,8 +51,8 @@ func newTAP(name string, mtu int) (Instance, error) {
 	}
 	instance := &tapAdapter{
 		regKey:         key,
-		receiveChannel: make(chan []byte, 1024),
-		sendChannel:    make(chan []byte, 1024),
+		receiveChannel: make(chan []byte, queueSize),
+		sendChannel:    make(chan []byte, queueSize),
 	}
 	/*
 		instance.originalMTU, err = getMTU(key)

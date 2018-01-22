@@ -55,7 +55,7 @@ func main() {
 		return
 	}
 
-	inst, err := adapter.NewTAP("tap0", 1450)
+	inst, err := adapter.NewTAP("tap0", 1450, 1)
 	if err != nil {
 		log.Fatal(err)
 		return

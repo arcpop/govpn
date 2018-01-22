@@ -142,13 +142,16 @@ func (c *Client) Close() error {
 }
 
 func (c *Client) sendWorker() {
-	for pkt := range c.clientToServerQueue {
+	for pkt, ok := <-c.clientToServerQueue; ok; pkt, ok = <-c.clientToServerQueue {
 		p, err := encryptVPNPacket(pkt, c.cryptoContext, true)
 		if err != nil {
 			log.Println("core: client: failed to encrypt a packet: ", err)
 			continue
 		}
-		c.conn.Write(p)
+		_, err = c.conn.Write(p)
+		if err != nil {
+			log.Println("core: client: failed to write a packet: ", err)
+		}
 	}
 }
 func (c *Client) Run() {

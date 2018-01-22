@@ -27,7 +27,7 @@ type tapInterface struct {
 	writeChannel, readChannel chan []byte
 }
 
-func newTAP(name string, mtu int) (Instance, error) {
+func newTAP(name string, mtu, queueSize int) (Instance, error) {
 	fd, err := unix.Open("/dev/net/tun", unix.O_RDWR, 0)
 	if err != nil {
 		return nil, fmt.Errorf("adapter: failed to open /dev/net/tun: " + err.Error())
@@ -48,8 +48,8 @@ func newTAP(name string, mtu int) (Instance, error) {
 	i := &tapInterface{
 		name:         parseName(ifr_req[0:16]),
 		fd:           fd,
-		writeChannel: make(chan []byte, 1024),
-		readChannel:  make(chan []byte, 1024),
+		writeChannel: make(chan []byte, queueSize),
+		readChannel:  make(chan []byte, queueSize),
 	}
 	iface, err := net.InterfaceByName(i.name)
 	if err != nil {

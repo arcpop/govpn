@@ -26,7 +26,7 @@ func init() {
 }
 
 func main() {
-	inst, err := adapter.NewTAP("tap0", 1450)
+	inst, err := adapter.NewTAP("tap0", 1450, QueueSize)
 	if err != nil {
 		log.Fatal("NewTap returned error:", err)
 		return
