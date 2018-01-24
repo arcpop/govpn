@@ -37,6 +37,7 @@ func printResults() {
 	}
 }
 func main() {
+	flag.Parse()
 	c, err := net.Dial(Network, ServerAddr)
 	if err != nil {
 		log.Fatal(err)

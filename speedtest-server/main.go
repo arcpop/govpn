@@ -10,19 +10,17 @@ import (
 
 var (
 	ServerAddr string
-	Network    string
 )
 
 func init() {
 	flag.StringVar(&ServerAddr, "server", "localhost:666", "Server listen address")
-	flag.StringVar(&Network, "net", "udp", "udp or tcp")
 }
 
 var Counter uint64
 
-func handleSpeedtestClient(c net.Conn) {
+func handleSpeedtestClient(c *net.UDPConn) {
 	buf := make([]byte, 1000)
-	for n, err := c.Read(buf); err == nil; n, err = c.Read(buf) {
+	for n, _, err := c.ReadFromUDP(buf); err == nil; n, _, err = c.ReadFromUDP(buf) {
 		var t uint64
 		t = uint64(n)
 		atomic.AddUint64(&Counter, t)
@@ -38,19 +36,18 @@ func printResults() {
 }
 
 func main() {
-	l, err := net.Listen(Network, ServerAddr)
+	flag.Parse()
+	addr, err := net.ResolveUDPAddr("udp", ServerAddr)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+	c, err := net.ListenUDP("udp", addr)
 	if err != nil {
 		log.Fatal(err)
 		return
 	}
 
 	go printResults()
-	for {
-		c, err := l.Accept()
-		if err != nil {
-			log.Fatal(err)
-			return
-		}
-		go handleSpeedtestClient(c)
-	}
+	handleSpeedtestClient(c)
 }
