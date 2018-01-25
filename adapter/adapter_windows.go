@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"syscall"
+	"unsafe"
 
 	"github.com/arcpop/govpn/core"
 	"golang.org/x/sys/windows"
@@ -24,13 +26,21 @@ var (
 
 	ioctlGetMacAddress  = ctlCode(fileDeviceUnknown, 1, 0, 0)
 	ioctlSetMediaStatus = ctlCode(fileDeviceUnknown, 6, 0, 0)
+
+	procGetOverlappedResult uintptr
 )
+
+func init() {
+	k32, _ := windows.LoadDLL("kernel32.dll")
+	procGetOverlappedResult = k32.MustFindProc("GetOverlappedResult").Addr()
+}
 
 type tapAdapter struct {
 	name         string
 	driverHandle windows.Handle
 
 	receiveChannel, sendChannel chan []byte
+	ro, wo                      *windows.Overlapped
 
 	mtu     int
 	macAddr core.MacAddr
@@ -49,10 +59,21 @@ func newTAP(name string, mtu, queueSize int) (Instance, error) {
 	if err != nil {
 		return nil, err
 	}
+	wo, err := createOverlapped()
+	if err != nil {
+		return nil, err
+	}
+	ro, err := createOverlapped()
+	if err != nil {
+		windows.CloseHandle(wo.HEvent)
+		return nil, err
+	}
 	instance := &tapAdapter{
 		regKey:         key,
 		receiveChannel: make(chan []byte, queueSize),
 		sendChannel:    make(chan []byte, queueSize),
+		wo:             wo,
+		ro:             ro,
 	}
 	/*
 		instance.originalMTU, err = getMTU(key)
@@ -78,7 +99,7 @@ func newTAP(name string, mtu, queueSize int) (Instance, error) {
 		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE,
 		nil,
 		windows.OPEN_EXISTING,
-		windows.FILE_ATTRIBUTE_NORMAL,
+		windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_FLAG_OVERLAPPED,
 		0,
 	)
 	if err != nil {
@@ -107,21 +128,67 @@ func newTAP(name string, mtu, queueSize int) (Instance, error) {
 
 	return instance, nil
 }
+
+func createOverlapped() (*windows.Overlapped, error) {
+	var err error
+	o := &windows.Overlapped{}
+	o.HEvent, err = windows.CreateEvent(nil, 1, 0, nil)
+	if err != nil {
+		return nil, err
+	}
+	return o, nil
+}
+
+func GetOverlappedResult(hFile windows.Handle, overlapped *windows.Overlapped, transferred *uint32, wait bool) error {
+	var r1 uintptr
+	var err error
+	if wait {
+		r1, _, err = syscall.Syscall6(procGetOverlappedResult, 4, uintptr(hFile), uintptr(unsafe.Pointer(overlapped)), uintptr(unsafe.Pointer(transferred)), uintptr(1), 0, 0)
+	} else {
+		r1, _, err = syscall.Syscall6(procGetOverlappedResult, 4, uintptr(hFile), uintptr(unsafe.Pointer(overlapped)), uintptr(unsafe.Pointer(transferred)), 0, 0, 0)
+	}
+	if r1&1 == 0 {
+		return err
+	}
+	return nil
+}
+
+func (a *tapAdapter) readPacket() ([]byte, error) {
+	var buf [1800]byte
+	var done uint32
+	err := windows.ReadFile(a.driverHandle, buf[:], &done, a.ro)
+	if err != nil && err != windows.ERROR_IO_PENDING {
+		return nil, err
+	}
+	err = GetOverlappedResult(a.driverHandle, a.ro, &done, true)
+	if err != nil {
+		return nil, err
+	}
+	return buf[:done], nil
+}
+
+func (a *tapAdapter) writePacket(p []byte) error {
+	var done uint32
+	err := windows.WriteFile(a.driverHandle, p, &done, a.wo)
+	if err != nil && err != windows.ERROR_IO_PENDING {
+		return err
+	}
+	return GetOverlappedResult(a.driverHandle, a.wo, &done, true)
+}
+
 func (a *tapAdapter) readWorker() {
 	for {
-		pkt := make([]byte, 1700)
-		n, err := windows.Read(a.driverHandle, pkt)
+		pkt, err := a.readPacket()
 		if err != nil {
 			log.Println("adapter: read returned error: " + err.Error())
 			return
 		}
-		pkt = pkt[:n]
 		a.receiveChannel <- pkt
 	}
 }
 func (a *tapAdapter) writeWorker() {
 	for pkt, ok := <-a.sendChannel; ok; pkt, ok = <-a.sendChannel {
-		_, err := windows.Write(a.driverHandle, pkt)
+		err := a.writePacket(pkt)
 		if err != nil {
 			log.Println("adapter: write returned error: " + err.Error())
 		}
